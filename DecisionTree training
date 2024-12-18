@@ -1,1 +1,99 @@
 !pip install boto3 pandas scikit-learn flask influxdb-client
+
+import boto3
+import pandas as pd
+from io import StringIO
+
+bucket_name = 'siotweather'
+file_key = 'weather_csv.csv'
+
+s3 = boto3.client('s3')
+
+try:
+    response = s3.get_object(Bucket=bucket_name, Key=file_key)
+    data = response['Body'].read().decode('utf-8')
+    df = pd.read_csv(StringIO(data))
+    print(df.head())
+except Exception as e:
+    print(e)
+
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import accuracy_score, classification_report
+
+# Updated features list (excluding 'rssi' and other irrelevant columns)
+features = ['blue', 'clouds', 'green', 'humidity', 'luminosity', 
+            'pressure', 'rainfall', 'red', 'temperature', 'visibility']
+target = 'weather'
+
+# Prepare the features and target variable
+X = df[features]
+y = df[target]
+
+# Split data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Train a Decision Tree model
+clf = DecisionTreeClassifier(random_state=42)
+clf.fit(X_train, y_train)
+
+# Make predictions
+y_pred = clf.predict(X_test)
+
+# Evaluate the model
+accuracy = accuracy_score(y_test, y_pred)
+print(f"Accuracy: {accuracy:.2f}")
+print("\nClassification Report:")
+print(classification_report(y_test, y_pred))
+
+import boto3
+from botocore.exceptions import NoCredentialsError
+import os
+
+# Define variables
+bucket_name = 'siotweather'
+s3_key = 'decision_tree_model.ipynb'  # The path in the bucket
+notebook_path = '/home/ubuntu/weather.ipynb'        # Local notebook path
+
+# Create an S3 client (with IAM role permissions)
+s3 = boto3.client('s3')
+
+try:
+    # Upload the notebook to S3
+    s3.upload_file(notebook_path, bucket_name, s3_key)
+    print(f"Successfully uploaded {notebook_path} to s3://{bucket_name}/{s3_key}")
+except FileNotFoundError:
+    print("The file was not found. Please check the path.")
+except NoCredentialsError:
+    print("Credentials not available. Check your IAM role.")
+
+
+import joblib
+# Save the trained Decision Tree model to a file
+joblib.dump(clf, 'decision_tree_model.pkl')
+print("Model saved as decision_tree_model.pkl")
+
+import boto3
+# Define S3 bucket and key
+bucket_name = 'siotweather'
+s3_key = 'decision_tree_model.pkl'  # Path in the S3 bucket
+local_model_path = 'decision_tree_model.pkl'
+# Upload the model to S3
+s3 = boto3.client('s3')
+s3.upload_file(local_model_path, bucket_name, s3_key)
+print(f"Model uploaded to s3://{bucket_name}/{s3_key}")
+
+
+
+Reult:
+Accuracy: 0.95
+
+Classification Report:
+              precision    recall  f1-score   support
+
+           0       0.96      0.97      0.96       161
+           1       0.94      0.92      0.93        89
+
+    accuracy                           0.95       250
+   macro avg       0.95      0.95      0.95       250
+weighted avg       0.95      0.95      0.95       250
